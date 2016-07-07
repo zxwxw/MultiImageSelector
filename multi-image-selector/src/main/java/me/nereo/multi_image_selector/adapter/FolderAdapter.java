@@ -54,13 +54,12 @@ public class FolderAdapter extends BaseAdapter {
 
     @Override
     public int getCount() {
-        return mFolders.size()+1;
+        return mFolders.size();
     }
 
     @Override
     public Folder getItem(int i) {
-        if(i == 0) return null;
-        return mFolders.get(i-1);
+        return mFolders.get(i);
     }
 
     @Override
@@ -78,27 +77,7 @@ public class FolderAdapter extends BaseAdapter {
             holder = (ViewHolder) view.getTag();
         }
         if (holder != null) {
-            if(i == 0){
-                holder.name.setText(R.string.mis_folder_all);
-                holder.path.setText("/sdcard");
-                holder.size.setText(String.format("%d%s",
-                        getTotalImageSize(), mContext.getResources().getString(R.string.mis_photo_unit)));
-                if(mFolders.size()>0){
-                    Folder f = mFolders.get(0);
-                    if (f != null) {
-                        Picasso.with(mContext)
-                                .load(new File(f.cover.path))
-                                .error(R.drawable.mis_default_error)
-                                .resizeDimen(R.dimen.mis_folder_cover_size, R.dimen.mis_folder_cover_size)
-                                .centerCrop()
-                                .into(holder.cover);
-                    }else{
-                        holder.cover.setImageResource(R.drawable.mis_default_error);
-                    }
-                }
-            }else {
-                holder.bindData(getItem(i));
-            }
+            holder.bindData(getItem(i));
             if(lastSelected == i){
                 holder.indicator.setVisibility(View.VISIBLE);
             }else{

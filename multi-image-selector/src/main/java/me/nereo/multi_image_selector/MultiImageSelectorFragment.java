@@ -13,7 +13,6 @@ import android.graphics.Point;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Handler;
 import android.provider.MediaStore;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
@@ -95,8 +94,6 @@ public class MultiImageSelectorFragment extends Fragment {
 
     private TextView mCategoryText;
     private View mPopupAnchorView;
-
-    private boolean hasFolderGened = false;
 
     private File mTmpFile;
 
@@ -208,42 +205,33 @@ public class MultiImageSelectorFragment extends Fragment {
             @Override
             public void onItemClick(AdapterView<?> adapterView, View view, int i, long l) {
 
+                if ( i == mFolderAdapter.getSelectIndex()) {
+                    return;
+                }
+
                 mFolderAdapter.setSelectIndex(i);
 
-                final int index = i;
-                final AdapterView v = adapterView;
-
-                new Handler().postDelayed(new Runnable() {
-                    @Override
-                    public void run() {
-                        mFolderPopupWindow.dismiss();
-
-                        if (index == 0) {
-                            getActivity().getSupportLoaderManager().restartLoader(LOADER_ALL, null, mLoaderCallback);
-                            mCategoryText.setText(R.string.mis_folder_all);
-                            if (showCamera()) {
-                                mImageAdapter.setShowCamera(true);
-                            } else {
-                                mImageAdapter.setShowCamera(false);
-                            }
-                        } else {
-                            Folder folder = (Folder) v.getAdapter().getItem(index);
-                            if (null != folder) {
-                                mImageAdapter.setData(folder.images);
-                                mCategoryText.setText(folder.name);
-                                if (resultList != null && resultList.size() > 0) {
-                                    mImageAdapter.setDefaultSelected(resultList);
-                                }
-                            }
-                            mImageAdapter.setShowCamera(false);
-                        }
-
-                        mGridView.smoothScrollToPosition(0);
-                    }
-                }, 100);
-
+                mFolderPopupWindow.dismiss();
+                updateFolder(i);
+                mGridView.smoothScrollToPosition(0);
             }
         });
+    }
+
+    private void updateFolder(int i) {
+        Folder folder = mFolderAdapter.getItem(i);
+        if (null != folder) {
+            mImageAdapter.setData(folder.images);
+            mCategoryText.setText(folder.name);
+            if (resultList != null && resultList.size() > 0) {
+                mImageAdapter.setDefaultSelected(resultList);
+            }
+        }
+        if (i == 0) {
+            mImageAdapter.setShowCamera(true);
+        } else {
+            mImageAdapter.setShowCamera(false);
+        }
     }
 
     @Override
@@ -424,9 +412,23 @@ public class MultiImageSelectorFragment extends Fragment {
 
         @Override
         public void onLoadFinished(Loader<Cursor> loader, Cursor data) {
+
+            String lastSelectedFolderPath = "/sdcard";
+            if (mFolderAdapter.getCount() > mFolderAdapter.getSelectIndex()) {
+                lastSelectedFolderPath = mFolderAdapter.getItem(mFolderAdapter.getSelectIndex()).path;
+            }
+
+            mResultFolder.clear();
+            Folder sdcardFolder = new Folder();
+            sdcardFolder.name = getResources().getString(R.string.mis_folder_all);
+            sdcardFolder.path = "/sdcard";
+            List<Image> images = new ArrayList<>();
+            sdcardFolder.images = images;
+            mResultFolder.add(sdcardFolder);
+
             if (data != null) {
                 if (data.getCount() > 0) {
-                    List<Image> images = new ArrayList<>();
+
                     data.moveToFirst();
                     do{
                         String path = data.getString(data.getColumnIndexOrThrow(IMAGE_PROJECTION[0]));
@@ -436,46 +438,49 @@ public class MultiImageSelectorFragment extends Fragment {
                         Image image = null;
                         if (!TextUtils.isEmpty(name)) {
                             image = new Image(path, name, dateTime);
-                            images.add(image);
-                        }
-                        if( !hasFolderGened ) {
-                            // get all folder data
-                            File folderFile = new File(path).getParentFile();
-                            if(folderFile != null && folderFile.exists()){
-                                String fp = folderFile.getAbsolutePath();
-                                Folder f = getFolderByPath(fp);
-                                if(f == null){
-                                    Folder folder = new Folder();
-                                    folder.name = folderFile.getName();
-                                    folder.path = fp;
-                                    folder.cover = image;
-                                    List<Image> imageList = new ArrayList<>();
-                                    imageList.add(image);
-                                    folder.images = imageList;
-                                    mResultFolder.add(folder);
-                                }else {
-                                    f.images.add(image);
-                                }
+                            sdcardFolder.images.add(image);
+                            if (sdcardFolder.cover == null) {
+                                sdcardFolder.cover = image;
                             }
                         }
 
+                        File folderFile = new File(path).getParentFile();
+                        if(folderFile != null && folderFile.exists()){
+                            String fp = folderFile.getAbsolutePath();
+                            Folder f = getFolderByPath(fp);
+                            if(f == null){
+                                Folder folder = new Folder();
+                                folder.name = folderFile.getName();
+                                folder.path = fp;
+                                folder.cover = image;
+                                List<Image> imageList = new ArrayList<>();
+                                imageList.add(image);
+                                folder.images = imageList;
+                                mResultFolder.add(folder);
+                            }else {
+                                f.images.add(image);
+                            }
+                        }
+
+
                     }while(data.moveToNext());
 
-                    mImageAdapter.setData(images);
+                    mFolderAdapter.setData(mResultFolder);
+
+
+                    int selectIndex = getFolderIndexByPath(lastSelectedFolderPath);
+                    mFolderAdapter.setSelectIndex(selectIndex);
+                    updateFolder(selectIndex);
+
                     if(resultList != null && resultList.size()>0){
                         mImageAdapter.setDefaultSelected(resultList);
-                    }
-                    if(!hasFolderGened) {
-                        mFolderAdapter.setData(mResultFolder);
-                        hasFolderGened = true;
                     }
                 }
             }
         }
 
         @Override
-        public void onLoaderReset(Loader<Cursor> loader) {
-
+        public void onLoaderReset(Loader<Cursor> lader) {
         }
     };
 
@@ -488,6 +493,15 @@ public class MultiImageSelectorFragment extends Fragment {
             }
         }
         return null;
+    }
+
+    private int getFolderIndexByPath(String path){
+        for (int i = 0; i < mResultFolder.size(); i++) {
+            if(TextUtils.equals(mResultFolder.get(i).path, path)){
+                return i;
+            }
+        }
+        return 0;
     }
 
     private boolean showCamera(){
